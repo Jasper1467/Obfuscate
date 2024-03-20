@@ -32,18 +32,27 @@ std::cout << obfuscated_string << std::endl;
 // Workaround for __LINE__ not being constexpr when /ZI (Edit and Continue) is enabled in Visual Studio
 // See: https://developercommunity.visualstudio.com/t/-line-cannot-be-used-as-an-argument-for-constexpr/195665
 #ifdef _MSC_VER
-	#define AY_CAT(X,Y) AY_CAT2(X,Y)
-	#define AY_CAT2(X,Y) X##Y
-	#define AY_LINE int(AY_CAT(__LINE__,U))
+#define AY_CAT(X,Y) AY_CAT2(X,Y)
+#define AY_CAT2(X,Y) X##Y
+#define AY_LINE int(AY_CAT(__LINE__,U))
 #else
-	#define AY_LINE __LINE__
+#define AY_LINE __LINE__
 #endif
 
 #ifndef AY_OBFUSCATE_DEFAULT_KEY
 	// The default 64 bit key to obfuscate strings with.
 	// This can be user specified by defining AY_OBFUSCATE_DEFAULT_KEY before 
 	// including obfuscate.h
-	#define AY_OBFUSCATE_DEFAULT_KEY ay::generate_key(AY_LINE)
+#define AY_OBFUSCATE_DEFAULT_KEY ay::generate_key(AY_LINE)
+
+#define AY_ROTL(a,b) (((a) << (b)) | ((a) >> (32 - (b))))
+#define AY_QR(a, b, c, d) (			\
+	a += b,  d ^= a,  d = ROTL(d,16),	\
+	c += d,  b ^= c,  b = ROTL(b,12),	\
+	a += b,  d ^= a,  d = ROTL(d, 8),	\
+	c += d,  b ^= c,  b = ROTL(b, 7))
+
+#define AY_ROUNDS 20
 #endif
 
 namespace ay
@@ -74,21 +83,27 @@ namespace ay
 	template <typename T>
 	using char_type = typename remove_const_ref<T>::type;
 
+	static unsigned int rotr32(unsigned int x, unsigned r)
+	{
+		return x >> r | x << (-r & 31);
+	}
+
+	constexpr unsigned int pcg32(unsigned long long state)
+	{
+		
+	}
+
 	// Generate a pseudo-random key that spans all 8 bytes
 	constexpr key_type generate_key(key_type seed)
 	{
-		// Use the MurmurHash3 64-bit finalizer to hash our seed
 		key_type key = seed;
-		key ^= (key >> 33);
-		key *= 0xff51afd7ed558ccd;
-		key ^= (key >> 33);
-		key *= 0xc4ceb9fe1a85ec53;
-		key ^= (key >> 33);
 
-		// Make sure that a bit in each byte is set
-		key |= 0x0101010101010101ull;
+		unsigned long long x = seed;
+		const auto count = static_cast<unsigned>(x >> 59);		// 59 = 64 - 5
 
-		return key;
+		x = x * 6364136223846793005ULL + 1;
+		x ^= x >> 18;								// 18 = (64 - 27)/2
+		return rotr32(static_cast<unsigned int>(x >> 27), count);	// 27 = 32 - 5
 	}
 
 	// Obfuscates or deobfuscates data with key
